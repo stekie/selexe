@@ -76,7 +76,7 @@ def assertTextContainedInEachElement(self, target, value):
     """
     target_elems = self.driver.find_elements_by_xpath(target)
     for target_elem in target_elems:
-        assert self.driver._isContained(value, target_elem.text)
+        assert self._isContained(value, target_elem.text)
  
  
 def verifyValidation(self, target, value):
@@ -142,5 +142,5 @@ def verifyValidation(self, target, value):
     self.waitForAttribute(target + '@class', expectedClassValue.strip())
     target_elem = self._find_target(target)
     ActionChains(self.driver).move_to_element(target_elem).perform()
-    assert self.getText('//*[@id="validationMsg"]').strip() == expectedValidationMsg.strip()
+    assert self.getText('id=validationMsg').strip() == expectedValidationMsg.strip()
     ActionChains(self.driver).move_by_offset(target_elem.size["width"] / 2 + 1, 0).perform()

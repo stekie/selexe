@@ -322,6 +322,7 @@ class SeleniumDriver(object):
         @param target: URL (string)
         @param value: <not used>
         """
+	self.wait = True
         self.driver.get(self.base_url + target)
 
     @seleniumcommand
@@ -332,9 +333,9 @@ class SeleniumDriver(object):
         @param value:  <not used>
         """
         self.wait = True
-        self.driver.implicitly_wait(self.wait_for_timeout / 1000)
-        self._find_target(target).click()
-	
+        self.driver.implicitly_wait(int(self.wait_for_timeout / 1000))
+	self._find_target(target).click()
+
 
     @seleniumcommand
     def click(self, target, value=None):
@@ -344,9 +345,10 @@ class SeleniumDriver(object):
         @param value:  <not used>
         """
 	self.wait = True
-        self.driver.implicitly_wait(self.wait_for_timeout / 1000)
-        self._find_target(target).click()
-
+        self.driver.implicitly_wait(int(self.wait_for_timeout / 1000))
+	ActionChains(self.driver).click(self._find_target(target)).perform()
+	            
+	
     @seleniumcommand
     def select(self, target, value):
         """
@@ -460,18 +462,14 @@ class SeleniumDriver(object):
         """
         Wait for a popup window to appear and load up.
         @param target: the JavaScript window "name" of the window that will appear (not the text of the title bar).
-        A target which is unspecified or specified as "null" is not supported currently.
         @param value: the timeout in milliseconds, after which the function will raise an error. If this value 
         is not specified, the default timeout will be used. See the setTimeoutAndPoll function for the default timeout.
         """
-        # value allows custom timeout
     	timeout = self.wait_for_timeout if not value else int(value)
     	num_repeats = int(timeout / 1000 / self.poll) 
-    	if target in ("null", "0"):
-                raise NotImplementedError('"null" or "0" are currently not available as pop up locators')
         for i in range(num_repeats):
             try:
-                self.driver.switch_to_window(target)
+                self._selectWindow('name=' + target)
                 self.driver.switch_to_window(0)
                 break
             except NoSuchWindowException:
@@ -491,10 +489,16 @@ class SeleniumDriver(object):
         @param target: the JavaScript window ID of the window to select
         @param value: <not used>
         """
-        ttype, ttarget = self._tag_and_value(target)
+        self._selectWindow(target)
+	
+	
+    def _selectWindow(self, target):
+	ttype, ttarget = self._tag_and_value(target)
         if ttarget in ['null', '']:
-            self.driver.switch_to_window(self.driver.window_handles[0])
-        elif ttype == 'name':
+            self.driver.switch_to_window(0)
+	elif ttarget == '_blank':
+	    self.driver.switch_to_window(self.driver.window_handles[1])
+        elif ttype in ['name']:
             self.driver.switch_to_window(ttarget)
         elif ttype in ['title']:
             for window in self.driver.window_handles:
@@ -544,8 +548,9 @@ class SeleniumDriver(object):
         @param value: <not used>
         @return: true if the pattern matches the text, false otherwise
         """
-        text = html2text(self.driver.page_source)
-        return True, self._isContained(target, text)
+	text = html2text(self.driver.page_source)
+	return True, self._isContained(target, text)
+    
    
     def wd_SEL_ElementPresent(self, target, value=None):        
         """
@@ -581,7 +586,7 @@ class SeleniumDriver(object):
         @param target: an element locator
         @param value: the expected text of the element
         @return: the text of the element
-        """ 
+        """
         return value, self._find_target(target).text.strip()
     
     
@@ -615,6 +620,7 @@ class SeleniumDriver(object):
         @param value: <not used>
         @return: the message of the most recent JavaScript alert
         """
+	self.wait = True
         alert = Alert(self.driver)
         text = alert.text.strip() 
         alert.accept()
@@ -707,18 +713,18 @@ class SeleniumDriver(object):
             if target.startswith("glob:"):
                 target = target[5:]
             target = self._translateWilcardToRegex(target)
-        # Search by xpath for regexps and wildcards     
-        for target_elem in self.driver.find_elements_by_xpath("//a"):
-            try:
-                text = target_elem.text
-                if text == re.match(target, text).group(0):
-                    return target_elem
-            except:
-                pass
-        else:
-            raise NoSuchElementException
-	
-	
+        # Search by xpath for regexps and wildcards
+	time.sleep(5)
+	for target_elem in self.driver.find_elements_by_xpath("//a"):
+	    try:
+		text = target_elem.text
+		if text == re.match(target, text).group(0):
+		    return target_elem
+	    except:
+		pass
+	else:
+	    raise NoSuchElementException
+    
     def _matches(self, expectedResult, result):
         """
         Try to match a result of a selenese command with its expected result.
@@ -761,7 +767,9 @@ class SeleniumDriver(object):
         @param text: a text in which the pattern should be found
         @return: true if found, false otherwise
         """
-        pat = pat.replace("...", "")
+	# strings of each pattern may end with "..." to shorten them.
+	pat = self._sel_pattern_abbreviation(pat)
+       
         # 1) regexp
         if pat.startswith('regexp:'):
             return re.search(pat[7:], text) is not None
@@ -774,7 +782,23 @@ class SeleniumDriver(object):
                 pat = pat[5:]
             pat = self._translateWilcardToRegex(pat)
             return re.search(pat, text) is not None
+	
+	
+    def _sel_pattern_abbreviation(self, aString):
+	if aString.endswith("..."): 
+	    aString = aString.replace("...", ".*")
+	    if aString.startswith("regexp:"):
+		pass
+	    elif aString.startswith("exact:"):
+		aString = aString.replace("exact", "regexp")
+	    elif aString.startswith("glob:"):
+		aString = aString.replace("glob", "regexp")
+	    else:
+		aString = "regexp:" + aString
+	    print aString
+	return aString
         
+    
     def _translateWilcardToRegex(self, wc):
         """
         Translate a wildcard pattern into in regular expression (in order to search with it in Python).
